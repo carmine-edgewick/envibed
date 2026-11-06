@@ -12,3 +12,18 @@
 "config.strength.doc" = "Vibration for a hit that takes all your health, 0 to 1."
 "config.duration_ms" = "Duration (ms)"
 "config.duration_ms.doc" = "How long one hit vibrates."
+
+[uk]
+"mod.name" = "Envibed"
+"mod.description" = "Вмикає вібрацію пристроїв Intiface, коли ваш персонаж отримує поранення."
+"config" = "Envibed"
+"config.enabled" = "Увімкнено"
+"config.enabled.doc" = "Чи викликають удари вібрацію."
+"config.url" = "Адреса Intiface"
+"config.url.doc" = "Сервер Intiface Central, типово ws://127.0.0.1:12345."
+"config.player" = "Гравець"
+"config.player.doc" = "Враховувати удари лише по цьому персонажу; порожньо — по всіх гравцях."
+"config.strength" = "Сила"
+"config.strength.doc" = "Сила вібрації для удару, що забирає все здоров'я, від 0 до 1."
+"config.duration_ms" = "Тривалість (мс)"
+"config.duration_ms.doc" = "Як довго вібрує один удар."

@@ -14,3 +14,6 @@ author.md
 *~
 .DS_Store
 *.log
+
+# Downloaded loader archives.
+*.zip
