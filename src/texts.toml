@@ -1,6 +1,6 @@
 [en]
 "mod.name" = "Envibed"
-"mod.description" = "Vibrates Intiface devices when your character lands a hit, makes a kill or dies."
+"mod.description" = "Vibrates Intiface devices when your character lands a hit, makes a kill, gains experience or dies."
 "config" = "Envibed"
 "config.enabled" = "On"
 "config.enabled.doc" = "Whether the toys react at all."
@@ -11,6 +11,8 @@
 "config.hit" = "Dealing damage"
 "config.kill" = "Killing"
 "config.death" = "Dying"
+"config.xp" = "Experience"
+"config.xp.doc" = "Gaining experience vibrates: stronger and longer the more you gain, stacking when gains overlap."
 "config.hit.strength" = "Strength"
 "config.hit.strength.doc" = "Vibration strength, 0 to 1; 0 turns this reaction off."
 "config.hit.duration_ms" = "Duration (ms)"
@@ -26,7 +28,7 @@
 
 [uk]
 "mod.name" = "Envibed"
-"mod.description" = "Вмикає вібрацію пристроїв Intiface, коли ваш персонаж завдає удару, вбиває або гине."
+"mod.description" = "Вмикає вібрацію пристроїв Intiface, коли ваш персонаж завдає удару, вбиває, отримує досвід або гине."
 "config" = "Envibed"
 "config.enabled" = "Увімкнено"
 "config.enabled.doc" = "Чи реагують пристрої взагалі."
@@ -37,6 +39,8 @@
 "config.hit" = "Завдання шкоди"
 "config.kill" = "Вбивство"
 "config.death" = "Смерть"
+"config.xp" = "Досвід"
+"config.xp.doc" = "Отримання досвіду викликає вібрацію: що більше досвіду, то сильніше й довше; збіги підсумовуються."
 "config.hit.strength" = "Сила"
 "config.hit.strength.doc" = "Сила вібрації від 0 до 1; 0 вимикає цю реакцію."
 "config.hit.duration_ms" = "Тривалість (мс)"

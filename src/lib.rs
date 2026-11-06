@@ -1,4 +1,4 @@
-//! Vibrates Intiface/Buttplug.io devices when your character lands a hit, makes a kill or dies.
+//! Vibrates Intiface/Buttplug.io devices when your character lands a hit, makes a kill, gains experience or dies.
 //!
 //! The game thread only drops a pulse into a channel; a thread of our own owns the websocket, so a slow or
 //! missing Intiface never stalls a frame.
@@ -9,7 +9,7 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{OnceLock, PoisonError, RwLock};
 use std::time::{Duration, Instant};
 
-use enshwick::game_events::{EntityDiedEvent, HitEvent};
+use enshwick::game_events::{EntityDiedEvent, HitEvent, XpGainedEvent};
 use enshwick::{Entity, Host, Load, Mod, Off};
 use serde_json::{Map, Value};
 use tungstenite::{Message, WebSocket};
@@ -39,6 +39,8 @@ struct Settings {
     /// When you die.
     #[config(group)]
     death: Reaction,
+    /// Whether gaining experience vibrates: stronger and longer the more you gain, stacking when gains overlap.
+    xp: bool,
 }
 
 /// How hard and how long the toy vibrates for one event.
@@ -62,6 +64,7 @@ impl Default for Settings {
             hit: Reaction { strength: 0.4, duration_ms: 300 },
             kill: Reaction { strength: 0.8, duration_ms: 1000 },
             death: Reaction { strength: 1.0, duration_ms: 2000 },
+            xp: true,
         }
     }
 }
@@ -76,15 +79,29 @@ fn settings() -> Option<Settings> {
 struct Pulse {
     level: f32,
     until: Instant,
+    mix: Mix,
 }
 
-fn pulse(r: Reaction) {
-    if r.strength <= 0.0 || r.duration_ms == 0 {
+/// How a pulse combines with the others running.
+#[derive(PartialEq)]
+enum Mix {
+    /// Only the strongest of these counts, so a killing blow feels like a kill, not a hit plus a kill.
+    Strongest,
+    /// Adds its level on top, so a burst of experience builds up.
+    Stack,
+}
+
+fn pulse(level: f32, ms: u32, mix: Mix) {
+    if level <= 0.0 || ms == 0 {
         return;
     }
     if let Some(tx) = PULSES.get() {
-        let _ = tx.send(Pulse { level: r.strength, until: Instant::now() + Duration::from_millis(r.duration_ms.into()) });
+        let _ = tx.send(Pulse { level, until: Instant::now() + Duration::from_millis(ms.into()), mix });
     }
+}
+
+fn react(r: Reaction) {
+    pulse(r.strength, r.duration_ms, Mix::Strongest);
 }
 
 /// The mod.
@@ -108,14 +125,21 @@ impl Mod for Envibed {
             if hit.health_change < 0
                 && let Some(s) = watched(attacker)
             {
-                pulse(s.hit);
+                react(s.hit);
             }
         })?;
         load.on::<EntityDiedEvent>(move |died| {
             if let Some(s) = watched(died.dead_entity_id) {
-                pulse(s.death);
+                react(s.death);
             } else if let Some(s) = died.killer_player.and_then(watched) {
-                pulse(s.kill);
+                react(s.kill);
+            }
+        })?;
+        load.on::<XpGainedEvent>(move |gain| {
+            if watched(gain.player_entity_id).is_some_and(|s| s.xp) {
+                // Gains run from about 2 to 100: the amount is the strength in percent, floored at 10%, over 1 to 5 s.
+                let share = (gain.amount as f32 / 100.0).clamp(0.0, 1.0);
+                pulse(share.max(0.1), 1000 + (4000.0 * share) as u32, Mix::Stack);
             }
         })?;
         Ok(Self)
@@ -194,19 +218,19 @@ impl Toys {
     }
 
     fn serve(&mut self, pulses: &Receiver<Pulse>) -> Res<()> {
-        let (mut level, mut until, mut sent) = (0.0, Instant::now(), 0.0);
+        let (mut running, mut sent) = (Vec::<Pulse>::new(), 0.0);
         let mut pinged = Instant::now();
         loop {
             match pulses.recv_timeout(TICK) {
-                Ok(p) => {
-                    // Overlapping hits take the stronger level and the later end.
-                    level = if Instant::now() < until { f32::max(level, p.level) } else { p.level };
-                    until = until.max(p.until);
-                }
+                Ok(p) => running.push(p),
                 Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => return Ok(()),
             }
-            let want = if Instant::now() < until { level } else { 0.0 };
+            let now = Instant::now();
+            running.retain(|p| p.until > now);
+            let level = |mix: Mix| running.iter().filter(move |p| p.mix == mix).map(|p| p.level);
+            let strongest = level(Mix::Strongest).fold(0.0, f32::max);
+            let want = (strongest + level(Mix::Stack).sum::<f32>()).min(1.0);
             if want != sent {
                 self.vibrate(want)?;
                 sent = want;

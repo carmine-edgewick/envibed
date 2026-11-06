@@ -1,7 +1,7 @@
 # Envibed
 
-An Enshrouded mod that makes Intiface/Buttplug.io toys vibrate when your character deals damage, makes a kill or
-dies. Each reaction has its own strength and duration.
+An Enshrouded mod that makes Intiface/Buttplug.io toys vibrate when your character deals damage, makes a kill,
+gains experience or dies. Each reaction has its own strength and duration; experience scales with the amount.
 
 Built on [Enshwick](https://github.com/enshwick/enshwick), the community mod loader (Rust API, runs under Proton).
 
@@ -58,9 +58,11 @@ Per world, in `<save>-mod-settings/carmine-edgewick.envibed/settings.toml`, or t
 | `hit.strength`, `hit.duration_ms` | `0.4`, `300` | you deal damage, arrows and spells included |
 | `kill.strength`, `kill.duration_ms` | `0.8`, `1000` | you kill something |
 | `death.strength`, `death.duration_ms` | `1.0`, `2000` | you die |
+| `xp` | `true` | you gain experience: the amount is the strength in percent (floor 10%, cap 100%), over 1 to 5 s |
 
-Strength runs 0 to 1, duration up to 10000 ms; 0 in either turns that reaction off. Overlapping reactions take the
-stronger level and the later end, so a killing blow buzzes as a kill.
+Strength runs 0 to 1, duration up to 10000 ms; 0 in either turns that reaction off. Of overlapping hit, kill and death
+pulses only the strongest counts, so a killing blow buzzes as a kill. Experience pulses add on top of that and of each
+other, capped at full strength.
 
 Changes apply when the world loads again.
 
