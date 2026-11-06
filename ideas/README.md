@@ -11,7 +11,7 @@ These are the worked-through ideas: what each needs, how to build it, and what t
 | # | Idea | State |
 |---|---|---|
 | [DONE](DONE.md) | **Everything already built** | dealing damage, kills, experience, death and the Shroud timer vibrate the toy |
-| [01](01-joined-worlds.md) | Vibrate in a world someone else hosts | **open question**, not started |
+| [01](01-joined-worlds.md) | Vibrate in a world someone else hosts | **worked out**: works only if the server runs it; not started |
 
 ## What to do next
 

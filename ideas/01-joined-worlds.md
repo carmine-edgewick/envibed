@@ -1,23 +1,30 @@
 # 01 — Vibrate in a world someone else hosts
 
-Enshwick's game events (`HitEvent`, `EntityDiedEvent`) are raised by the server's systems. A client sees them only
-while it hosts the world itself. Join a friend's world and the hits land on their server: the mod on your machine sees
-nothing, and a mod on theirs would try to reach Intiface on *their* localhost.
+Enshwick's game events, world reads and scheduler serve the server. A client sees them only while it hosts the world
+itself. And a client runs only the mods the world it joined runs, turning its others off: Enshwick has no client-only
+side (`concepts/sides-and-hosting.md`). So on a joined world Envibed does nothing unless the server runs it too.
 
-## Options
+## The way that works: the server runs it, you alone install it
 
-- **Client-side health watch.** [Assumption: the client keeps a replicated copy of its own character's health for the
-  HUD.] A client mod (`side = "client"`) polls or hooks that value and vibrates on a drop. Needs: whether Enshwick's
-  `ui` module or a reflected component exposes it on a client; otherwise a hook found with `load.symbol` /
-  [Finding the game](https://github.com/enshwick/enshwick/blob/main/book/src/finding-the-game.md). Catches fall and
-  shroud damage too, which `HitEvent` misses.
-- **Server relays to the client.** `side = "both"`: the host's server sees the hit and sends it over Enshwick's `net`
-  messages to the hit player's client, which talks to its own Intiface. Clean, but every host must install the mod,
-  and it takes part in the join check.
+- Envibed becomes `side = "both"`. The server watches events for every player and sends each reaction over
+  Enshwick's mod messages (`messages.md`) to that player's client, which drives its own Intiface on its own localhost.
+- The server (a friend's hosted game, or a dedicated server whose files you can reach) installs the loader and Envibed.
+- Other players need nothing: with `require_enshwick = false` in the world's
+  `<save>-mod-settings/enshwick/enshwick.toml`, the server admits clients without Enshwick, and a vanilla client never
+  says hello, so it is never sent anything. A player who *has* Enshwick but not Envibed is kicked by the join check.
+- The host can see the mod: it is in the server's mods list, `mods.lock`, and the lobby names Enshwick.
+- Solo play keeps working: a hosted game never checks its host, and its server part messages its own client in process.
 
-[Assumption: the client-side watch is preferred, since it needs nothing from the host.]
+[Assumption: the per-player pulse is a small message (level, duration, mix) sent from the server's handlers; the
+client's half owns the worker thread that today lives in the server's half.]
 
-## Open
+## Without the server's help
 
-- Does a client have a readable own-health value through the API, without a raw hook?
-- Is a hit also visible client-side as an event (damage numbers, hit flash) worth hooking instead?
+Not through Enshwick. Outside it, either costs far more and does less:
+
+- **Controller rumble.** Forward whatever the game rumbles a gamepad for, through a virtual controller with force
+  feedback, to Intiface. Works anywhere, but only for the game's own rumble events, not hits dealt, XP or the Shroud.
+- **Reading the screen.** Watch the HUD's Shroud timer and XP bar. Works anywhere, fragile across resolutions, UI
+  scale and patches.
+- **An own client-side DLL** with raw hooks into the client's replicated state. Possible in principle; a
+  reverse-engineering project on its own, re-done after every game patch.
