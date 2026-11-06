@@ -10,7 +10,7 @@ These are the worked-through ideas: what each needs, how to build it, and what t
 
 | # | Idea | State |
 |---|---|---|
-| [DONE](DONE.md) | **Everything already built** | hits and deaths vibrate the toy, single player under Proton (2026-11-06) |
+| [DONE](DONE.md) | **Everything already built** | dealing damage, kills and death vibrate the toy, each with its own strength and duration |
 | [01](01-joined-worlds.md) | Vibrate in a world someone else hosts | **open question**, not started |
 
 ## What to do next

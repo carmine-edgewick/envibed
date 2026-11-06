@@ -1,4 +1,4 @@
-//! Vibrates Intiface/Buttplug.io devices when your character gets hurt.
+//! Vibrates Intiface/Buttplug.io devices when your character lands a hit, makes a kill or dies.
 //!
 //! The game thread only drops a pulse into a channel; a thread of our own owns the websocket, so a slow or
 //! missing Intiface never stalls a frame.
@@ -24,21 +24,45 @@ const RETRY: Duration = Duration::from_secs(5);
 #[enshwick::config]
 #[derive(Debug, Clone)]
 struct Settings {
-    /// Whether hits make toys vibrate.
+    /// Whether the toys react at all.
     enabled: bool,
     /// Intiface Central's server address.
     url: String,
-    /// Only this character's hits count; empty for every player.
+    /// Only this character counts; empty for every player.
     player: String,
-    /// Vibration for a hit that takes all your health, 0 to 1.
+    /// When you deal damage.
+    #[config(group)]
+    hit: Reaction,
+    /// When you kill something.
+    #[config(group)]
+    kill: Reaction,
+    /// When you die.
+    #[config(group)]
+    death: Reaction,
+}
+
+/// How hard and how long the toy vibrates for one event.
+#[enshwick::config(group)]
+#[derive(Debug, Clone, Copy, Default)]
+struct Reaction {
+    /// Vibration strength, 0 to 1; 0 turns this reaction off.
+    #[config(range = 0.0..=1.0)]
     strength: f32,
-    /// How long one hit vibrates, in milliseconds.
+    /// How long it vibrates, in milliseconds; 0 turns this reaction off.
+    #[config(range = 0..=10000)]
     duration_ms: u32,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { enabled: true, url: DEFAULT_URL.into(), player: String::new(), strength: 1.0, duration_ms: 600 }
+        Self {
+            enabled: true,
+            url: DEFAULT_URL.into(),
+            player: String::new(),
+            hit: Reaction { strength: 0.4, duration_ms: 300 },
+            kill: Reaction { strength: 0.8, duration_ms: 1000 },
+            death: Reaction { strength: 1.0, duration_ms: 2000 },
+        }
     }
 }
 
@@ -54,9 +78,12 @@ struct Pulse {
     until: Instant,
 }
 
-fn pulse(level: f32, ms: u32) {
+fn pulse(r: Reaction) {
+    if r.strength <= 0.0 || r.duration_ms == 0 {
+        return;
+    }
     if let Some(tx) = PULSES.get() {
-        let _ = tx.send(Pulse { level, until: Instant::now() + Duration::from_millis(ms.into()) });
+        let _ = tx.send(Pulse { level: r.strength, until: Instant::now() + Duration::from_millis(r.duration_ms.into()) });
     }
 }
 
@@ -69,25 +96,26 @@ impl Mod for Envibed {
         load.texts()?;
         load.on_settings(|s: &Settings| *SETTINGS.write().unwrap_or_else(PoisonError::into_inner) = Some(s.clone()))?;
         let world = load.world()?;
-        // The settings this hit should use, if it landed on a player we watch.
-        let watched = move |target: Entity| {
+        // The settings to react with, if `entity` is a player we watch.
+        let watched = move |entity: Entity| {
             let s = settings().filter(|s| s.enabled)?;
-            let player = world.player(target)?;
+            let player = world.player(entity)?;
             (s.player.is_empty() || player.name.eq_ignore_ascii_case(&s.player)).then_some(s)
         };
         load.on::<HitEvent>(move |hit| {
-            if hit.health_change >= 0 {
-                return;
+            // The root source credits the player for arrows and spells, not just melee.
+            let Some(attacker) = hit.root_source_id.filter(|a| *a != hit.target_id) else { return };
+            if hit.health_change < 0
+                && let Some(s) = watched(attacker)
+            {
+                pulse(s.hit);
             }
-            let Some(s) = watched(hit.target_id) else { return };
-            let max = world.vitals(hit.target_id).map_or(100, |v| v.health.max).max(1);
-            // Scratches get a floor, or they'd be too faint to notice.
-            let share = (-hit.health_change as f32 / max as f32).clamp(0.25, 1.0);
-            pulse(share * s.strength.clamp(0.0, 1.0), s.duration_ms.clamp(100, 5000));
         })?;
         load.on::<EntityDiedEvent>(move |died| {
             if let Some(s) = watched(died.dead_entity_id) {
-                pulse(s.strength.clamp(0.0, 1.0), 2000);
+                pulse(s.death);
+            } else if let Some(s) = died.killer_player.and_then(watched) {
+                pulse(s.kill);
             }
         })?;
         Ok(Self)

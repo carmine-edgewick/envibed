@@ -2,10 +2,12 @@
 
 What shipped from `ideas/`: what it does, where it lives, the decisions that hold weight, the traps.
 
-## Hits and deaths vibrate the toy (2026-11-06)
+## Reactions: dealing damage, kills, death (2026-11-06)
 
-`src/lib.rs`. `HitEvent` on a player character queues a pulse scaled by the share of max health lost, floored at a
-quarter so scratches are felt; `EntityDiedEvent` queues 2 s at full strength. A worker thread owns the Buttplug v3
+`src/lib.rs`. A damaging `HitEvent` whose `root_source_id` is a watched player (so arrows and spells count), and an
+`EntityDiedEvent` whose `killer_player` or dead entity is one, each queue a pulse with that reaction's strength and
+duration, a `Reaction` settings group per event. The first version reacted to damage *taken*, scaled by health lost;
+replaced the same day by dealing damage, at the user's request. A worker thread owns the Buttplug v3
 websocket, so the game thread never waits on Intiface. Tried in single player under Proton (Wine 11) with a Lovense
 Lush through native Intiface Central on Linux.
 
