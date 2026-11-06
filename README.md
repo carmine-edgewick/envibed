@@ -19,10 +19,14 @@ Proton shares the host's network stack, so the Windows DLL reaches the native Li
 
 ## Limits
 
-- Game events fire on the server side only. That covers single player and worlds **you host**. When you join someone
-  else's world, the host's server sees the hits, not your game, so nothing vibrates.
-- Fall and shroud damage change health without a hit event, so they don't vibrate.
-- Enshwick is alpha (1.0.0-alpha.12, 2026-11-05). A game patch can break the loader until it updates. Back up saves.
+- Experience, death and the Shroud timer work in any world, worlds you join included: they read your own character as
+  your game sees it, from the `NetworkPlayerAttributes` the server replicates to you (`src/own.rs`).
+- Dealing damage and kills come from the server's game events, so they work only where your game runs the world:
+  single player or a world you host.
+- In a world you join, the mod runs on its default settings: settings files belong to worlds, and that world's host
+  doesn't have Envibed's.
+- Enshwick is alpha (1.0.0-alpha.12, 2026-11-05). A game patch can break the loader until it updates, and the
+  `player_ui` hook (its 121-word iterator is read off the game's code) may need redoing. Back up saves.
 
 ## Setup
 

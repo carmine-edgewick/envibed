@@ -11,10 +11,10 @@ These are the worked-through ideas: what each needs, how to build it, and what t
 | # | Idea | State |
 |---|---|---|
 | [DONE](DONE.md) | **Everything already built** | dealing damage, kills, experience, death and the Shroud timer vibrate the toy |
-| [01](01-joined-worlds.md) | Vibrate in a world someone else hosts | **worked out**: works only if the server runs it; not started |
+| [01](01-joined-worlds.md) | Vibrate in a world someone else hosts | **experience, death, Shroud shipped client-side**; left: dealing damage and kills |
 
 ## What to do next
 
 | # | Item | Urgency | Difficulty | Why here |
 |---|---|---|---|---|
-| 1 | Joined worlds (`01-joined-worlds.md`) | medium | days, unknown | The most common way to play is in someone else's world, where the mod does nothing today |
+| 1 | Hits and kills in joined worlds (`01-joined-worlds.md`) | medium | days | The damage-number list is the lead; the rest already works there |

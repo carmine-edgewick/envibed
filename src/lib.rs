@@ -1,20 +1,24 @@
 //! Vibrates Intiface/Buttplug.io devices when your character lands a hit, makes a kill, gains experience or dies, and rumbles while
 //! the Shroud timer runs down.
 //!
+//! Hits and kills come from the server's game events, so they work in worlds you host. Experience, death and the
+//! Shroud timer come from your own character as your game sees it (`own`), so they work in worlds you join too.
+//!
 //! The game thread only drops a pulse into a channel; a thread of our own owns the websocket, so a slow or
 //! missing Intiface never stalls a frame.
 
 use std::io::ErrorKind;
 use std::net::TcpStream;
-use std::ops::ControlFlow;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{OnceLock, PoisonError, RwLock};
 use std::time::{Duration, Instant};
 
-use enshwick::game_events::{EntityDiedEvent, HitEvent, XpGainedEvent};
+use enshwick::game_events::{EntityDiedEvent, HitEvent};
 use enshwick::{Entity, Host, Load, Mod, Off};
 use serde_json::{Map, Value};
 use tungstenite::{Message, WebSocket};
+
+mod own;
 
 enshwick::texts!();
 
@@ -34,7 +38,7 @@ struct Settings {
     enabled: bool,
     /// Intiface Central's server address.
     url: String,
-    /// Only this character counts; empty for every player.
+    /// Only this character's hits and kills count, in worlds you host; empty for every player.
     player: String,
     /// When you deal damage.
     #[config(group)]
@@ -128,6 +132,12 @@ fn react(r: Reaction) {
 }
 
 /// Low until the last three minutes, then rising on a curve to 75% as the Shroud timer reaches zero.
+/// Gains run from about 2 to 100: the amount is the strength in percent, floored at 10%, over 1 to 5 s.
+fn xp(amount: u32) {
+    let share = (amount as f32 / 100.0).clamp(0.0, 1.0);
+    pulse(share.max(0.1), 1000 + (4000.0 * share) as u32, Mix::Stack);
+}
+
 fn shroud_rumble(secs_left: i32) -> f32 {
     let close = 1.0 - (secs_left.max(0) as f32 / 180.0).min(1.0);
     0.1 + 0.65 * close * close
@@ -158,31 +168,14 @@ impl Mod for Envibed {
             }
         })?;
         load.on::<EntityDiedEvent>(move |died| {
-            if let Some(s) = watched(died.dead_entity_id) {
-                react(s.death);
-            } else if let Some(s) = died.killer_player.and_then(watched) {
+            if let Some(s) = died.killer_player.and_then(watched) {
                 react(s.kill);
             }
         })?;
-        load.on::<XpGainedEvent>(move |gain| {
-            if watched(gain.player_entity_id).is_some_and(|s| s.xp) {
-                // Gains run from about 2 to 100: the amount is the strength in percent, floored at 10%, over 1 to 5 s.
-                let share = (gain.amount as f32 / 100.0).clamp(0.0, 1.0);
-                pulse(share.max(0.1), 1000 + (4000.0 * share) as u32, Mix::Stack);
-            }
-        })?;
-        load.scheduler()?.every(Duration::from_secs(1), move || {
-            let rumble = world
-                .players()
-                .into_iter()
-                .filter(|p| watched(p.entity).is_some_and(|s| s.shroud) && world.in_shroud(p.entity) == Some(true))
-                .filter_map(|p| world.shroud_time(p.entity))
-                .map(|t| shroud_rumble(t.current))
-                .fold(0.0, f32::max);
-            // Outlives the next refresh by half a second, so the rumble doesn't flicker between ticks.
-            pulse(rumble, 1500, Mix::Rumble);
-            ControlFlow::Continue(())
-        });
+        // Without it hits and kills still work; only your own character's reactions are missing.
+        if let Err(off) = own::init(load) {
+            enshwick::warn!("no experience, death or Shroud reactions on this build: {off:?}");
+        }
         Ok(Self)
     }
 
