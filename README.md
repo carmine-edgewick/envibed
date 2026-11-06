@@ -32,23 +32,27 @@ Proton shares the host's network stack, so the Windows DLL reaches the native Li
 
 1. **Intiface Central** (native): `paru -S intiface-central-bin`. Start it, press *Start Server* (default port
    12345), and check your toy appears under *Devices*.
-2. **Toolchain**:
-   ```sh
-   rustup target add x86_64-pc-windows-msvc
-   cargo install --locked cargo-xwin
-   cargo install --locked --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.12 cargo-enshwick
-   ```
-3. **Loader**: download `enshwick.zip` from the
+2. **Loader**: download `enshwick.zip` from Enshwick's
    [v1.0.0-alpha.12 release](https://github.com/enshwick/enshwick/releases/tag/v1.0.0-alpha.12) and extract it
    into `~/.local/share/Steam/steamapps/common/Enshrouded/` (adds `powrprof.dll` and `mods/`).
-4. **Launch options** (Steam → Enshrouded → Properties): `WINEDLLOVERRIDES="powrprof=n,b" %command%`
-5. **Build and install the mod**:
-   ```sh
-   cargo enshwick install --game ~/.local/share/Steam/steamapps/common/Enshrouded
-   ```
-6. Start the game. *Mods* in the main menu should list Envibed. Logs are in the game folder under `logs/`:
+3. **Launch options** (Steam → Enshrouded → Properties): `WINEDLLOVERRIDES="powrprof=n,b" %command%`
+4. **Envibed**: download `envibed-<version>.zip` from this repo's
+   [releases](https://github.com/carmine-edgewick/envibed/releases) and extract it into the same game folder (adds
+   `mods/carmine-edgewick.envibed/envibed.dll`). Each release names the Enshwick and game versions it was built for.
+5. Start the game. *Mods* in the main menu should list Envibed. Logs are in the game folder under `logs/`:
    `enshwick_*.log` says whether the mod loaded, `carmine-edgewick.envibed_*.log` shows "connected to Intiface" and
    "toy ready".
+
+### Building from source
+
+Instead of step 4:
+
+```sh
+rustup target add x86_64-pc-windows-msvc
+cargo install --locked cargo-xwin
+cargo install --locked --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.12 cargo-enshwick
+cargo enshwick install --game ~/.local/share/Steam/steamapps/common/Enshrouded
+```
 
 ## Settings
 
@@ -77,4 +81,10 @@ player's slot is logged to check that.
 
 ## Uninstall
 
-Delete `powrprof.dll` from the game folder and remove the launch option.
+Delete `powrprof.dll` from the game folder and remove the launch option. To remove only Envibed, delete
+`mods/carmine-edgewick.envibed/`.
+
+## License
+
+MIT, see `LICENSE`. Release builds include Enshwick (MIT) and other MIT/Apache-2.0 crates; their notices ship
+in the release zip.

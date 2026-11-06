@@ -1,10 +1,11 @@
 [package]
 name = "envibed"
+license = "MIT"
 version = "0.1.0"
-description = "Vibrates Intiface/Buttplug.io devices when your character gets hurt"
+description = "Vibrates Intiface/Buttplug.io toys on hits dealt, kills, experience, death and the Shroud timer"
 edition = "2024"
 rust-version = "1.99"
-license = "MIT"
+
 publish = false
 
 [package.metadata.enshwick]
