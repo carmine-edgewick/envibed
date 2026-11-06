@@ -1,7 +1,7 @@
 # Envibed
 
 An Enshrouded mod that makes Intiface/Buttplug.io toys vibrate when your character deals damage, makes a kill,
-gains experience or dies. Each reaction has its own strength and duration; experience scales with the amount.
+gains experience or dies, and rumbles while the Shroud timer runs down. Each reaction has its own strength and duration; experience scales with the amount.
 
 Built on [Enshwick](https://github.com/enshwick/enshwick), the community mod loader (Rust API, runs under Proton).
 
@@ -59,6 +59,7 @@ Per world, in `<save>-mod-settings/carmine-edgewick.envibed/settings.toml`, or t
 | `kill.strength`, `kill.duration_ms` | `0.8`, `1000` | you kill something |
 | `death.strength`, `death.duration_ms` | `1.0`, `2000` | you die |
 | `xp` | `true` | you gain experience: the amount is the strength in percent (floor 10%, cap 100%), over 1 to 5 s |
+| `shroud` | `true` | a rumble while your Shroud timer runs down: 10% until the last 3 minutes, then rising to 75% at zero |
 
 Strength runs 0 to 1, duration up to 10000 ms; 0 in either turns that reaction off. Of overlapping hit, kill and death
 pulses only the strongest counts, so a killing blow buzzes as a kill. Experience pulses add on top of that and of each
@@ -66,7 +67,8 @@ other, capped at full strength.
 
 Every pulse holds its level for its duration, then fades out over 15 s: fast at first, then a long gentle tail (the
 level times (1 − t)², t running 0 to 1 over the fade). Fading pulses still count, so they overlap and stack far more
-often than the bare durations suggest.
+often than the bare durations suggest. The Shroud rumble doesn't fade: it lies under everything else and stops when you leave
+the Shroud.
 
 Changes apply when the world loads again.
 

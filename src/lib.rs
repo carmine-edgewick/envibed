@@ -1,10 +1,12 @@
-//! Vibrates Intiface/Buttplug.io devices when your character lands a hit, makes a kill, gains experience or dies.
+//! Vibrates Intiface/Buttplug.io devices when your character lands a hit, makes a kill, gains experience or dies, and rumbles while
+//! the Shroud timer runs down.
 //!
 //! The game thread only drops a pulse into a channel; a thread of our own owns the websocket, so a slow or
 //! missing Intiface never stalls a frame.
 
 use std::io::ErrorKind;
 use std::net::TcpStream;
+use std::ops::ControlFlow;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{OnceLock, PoisonError, RwLock};
 use std::time::{Duration, Instant};
@@ -45,6 +47,8 @@ struct Settings {
     death: Reaction,
     /// Whether gaining experience vibrates: stronger and longer the more you gain, stacking when gains overlap.
     xp: bool,
+    /// Whether a low rumble runs while the Shroud timer counts down, rising to 75% over the last minutes.
+    shroud: bool,
 }
 
 /// How hard and how long the toy vibrates for one event.
@@ -69,6 +73,7 @@ impl Default for Settings {
             kill: Reaction { strength: 0.8, duration_ms: 1000 },
             death: Reaction { strength: 1.0, duration_ms: 2000 },
             xp: true,
+            shroud: true,
         }
     }
 }
@@ -89,6 +94,9 @@ struct Pulse {
 impl Pulse {
     /// Full level until `until`, then an ease-out over `DECAY`: it drops fast at first and trails off gently.
     fn level(&self, now: Instant) -> f32 {
+        if self.mix == Mix::Rumble && now >= self.until {
+            return 0.0;
+        }
         let past = now.saturating_duration_since(self.until).as_secs_f32();
         let left = 1.0 - (past / DECAY.as_secs_f32()).min(1.0);
         self.level * left * left
@@ -102,6 +110,8 @@ enum Mix {
     Strongest,
     /// Adds its level on top, so a burst of experience builds up.
     Stack,
+    /// A steady level under everything else, refreshed every second and gone without a fade once it isn't.
+    Rumble,
 }
 
 fn pulse(level: f32, ms: u32, mix: Mix) {
@@ -115,6 +125,12 @@ fn pulse(level: f32, ms: u32, mix: Mix) {
 
 fn react(r: Reaction) {
     pulse(r.strength, r.duration_ms, Mix::Strongest);
+}
+
+/// Low until the last three minutes, then rising on a curve to 75% as the Shroud timer reaches zero.
+fn shroud_rumble(secs_left: i32) -> f32 {
+    let close = 1.0 - (secs_left.max(0) as f32 / 180.0).min(1.0);
+    0.1 + 0.65 * close * close
 }
 
 /// The mod.
@@ -155,6 +171,18 @@ impl Mod for Envibed {
                 pulse(share.max(0.1), 1000 + (4000.0 * share) as u32, Mix::Stack);
             }
         })?;
+        load.scheduler()?.every(Duration::from_secs(1), move || {
+            let rumble = world
+                .players()
+                .into_iter()
+                .filter(|p| watched(p.entity).is_some_and(|s| s.shroud) && world.in_shroud(p.entity) == Some(true))
+                .filter_map(|p| world.shroud_time(p.entity))
+                .map(|t| shroud_rumble(t.current))
+                .fold(0.0, f32::max);
+            // Outlives the next refresh by half a second, so the rumble doesn't flicker between ticks.
+            pulse(rumble, 1500, Mix::Rumble);
+            ControlFlow::Continue(())
+        });
         Ok(Self)
     }
 
@@ -243,7 +271,8 @@ impl Toys {
             running.retain(|p| p.until + DECAY > now);
             let level = |mix: Mix| running.iter().filter(move |p| p.mix == mix).map(|p| p.level(now));
             let strongest = level(Mix::Strongest).fold(0.0, f32::max);
-            let want = ((strongest + level(Mix::Stack).sum::<f32>()).min(1.0) / STEP).round() * STEP;
+            let rumble = level(Mix::Rumble).fold(0.0, f32::max);
+            let want = ((rumble + strongest + level(Mix::Stack).sum::<f32>()).min(1.0) / STEP).round() * STEP;
             if want != sent {
                 self.vibrate(want)?;
                 sent = want;

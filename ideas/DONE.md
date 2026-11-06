@@ -2,7 +2,7 @@
 
 What shipped from `ideas/`: what it does, where it lives, the decisions that hold weight, the traps.
 
-## Reactions: dealing damage, kills, experience, death (2026-11-06)
+## Reactions: dealing damage, kills, experience, death, the Shroud timer (2026-11-06)
 
 `src/lib.rs`. A damaging `HitEvent` whose `root_source_id` is a watched player (so arrows and spells count), and an
 `EntityDiedEvent` whose `killer_player` or dead entity is one, each queue a pulse with that reaction's strength and
@@ -10,7 +10,10 @@ duration, a `Reaction` settings group per event. The first version reacted to da
 replaced the same day by dealing damage, at the user's request.
 `XpGainedEvent` vibrates at amount/100 (floor 10%) for 1 to 5 s. The worker keeps every running pulse: hit, kill and
 death are `Mix::Strongest`, experience is `Mix::Stack` and adds on top, capped at 1. Each pulse then fades over a fixed 15 s,
-`level × (1 − t)²`; the sum is rounded to 0.05 so a fade sends one command per step, not one per 20 ms tick. A worker thread owns the Buttplug v3
+`level × (1 − t)²`; the sum is rounded to 0.05 so a fade sends one command per step, not one per 20 ms tick.
+A scheduler task reads `world.in_shroud` and `world.shroud_time` (seconds left) once a second and sends a `Mix::Rumble`
+pulse lasting 1.5 s with no fade: `0.1 + 0.65 × close²`, `close` running 0 to 1 over the last 180 s. Refreshing
+instead of holding state means the rumble ends by itself when the player leaves the Shroud or the world stops. A worker thread owns the Buttplug v3
 websocket, so the game thread never waits on Intiface. Tried in single player under Proton (Wine 11) with a Lovense
 Lush through native Intiface Central on Linux.
 
