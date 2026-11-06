@@ -9,13 +9,15 @@ use enshwick::ecs::{ComponentType, Components, Ecs, Worlds};
 use enshwick::raw::read_at;
 use enshwick::{Load, Next, Off};
 
-use crate::{Mix, pulse, react, settings, shroud_rumble, xp};
+use crate::{Mix, Settings, pulse, settings, xp};
 
 const ATTRIBUTES: &str = "keen::ecs::NetworkPlayerAttributes";
 /// Words of `player_ui`'s query iterator: it hands the engine's iterator init 0x3c8 bytes.
 const WORDS: usize = 121;
 /// How long after the Shroud value last dropped the timer still counts as running; it drops once a second.
 const TICKING: Duration = Duration::from_millis(2500);
+/// The normal Shroud drains a second per second; well above that is the dangerous Shroud.
+const DANGEROUS_RATE: f32 = 2.5;
 /// A gap this long between samples means menus or another world: start from fresh, don't compare.
 const STALE: Duration = Duration::from_secs(2);
 
@@ -50,6 +52,9 @@ struct Seen {
     last: Stats,
     at: Instant,
     fog_dropped: Option<Instant>,
+    /// A Shroud reading at least a second old, to measure how fast the timer drains.
+    mark: (Instant, u16),
+    dangerous: bool,
     rumbled: Instant,
 }
 
@@ -119,7 +124,7 @@ fn player_ui(next: Next<'_, unsafe extern "system" fn(*mut u64)>, ctx: *mut u64)
 fn sample(now: Stats) {
     let t = Instant::now();
     let mut guard = SEEN.lock().unwrap_or_else(PoisonError::into_inner);
-    let fresh = Seen { last: now, at: t, fog_dropped: None, rumbled: t };
+    let fresh = Seen { last: now, at: t, fog_dropped: None, mark: (t, now.fog), dangerous: false, rumbled: t };
     let seen = match guard.as_mut() {
         Some(seen) if t - seen.at < STALE => seen,
         _ => {
@@ -135,10 +140,21 @@ fn sample(now: Stats) {
         seen.fog_dropped = Some(t);
     } else if now.fog > last.fog {
         seen.fog_dropped = None;
+        seen.dangerous = false;
     }
-    let Some(s) = settings().filter(|s| s.enabled) else { return };
+    let (marked, fog) = seen.mark;
+    if t - marked >= Duration::from_secs(1) {
+        let rate = f32::from(fog.saturating_sub(now.fog)) / (t - marked).as_secs_f32();
+        // At zero the timer can't fall any further, so whatever it was doing on the way down still holds.
+        if now.fog > 0 {
+            seen.dangerous = rate > DANGEROUS_RATE;
+        }
+        seen.mark = (t, now.fog);
+    }
+    let Some(s) = settings() else { return };
     if last.health > 0 && now.health == 0 {
-        react(s.death);
+        enshwick::info!("you died");
+        pulse(s.death_strength, s.death_duration_ms, Mix::Strongest);
     }
     // A level-up resets experience: the gain is what was left to the old level plus what is into the new one.
     let gained = match now.level.checked_sub(last.level) {
@@ -147,13 +163,22 @@ fn sample(now: Stats) {
         _ => 0,
     };
     if s.xp && gained > 0 {
+        enshwick::info_every!(Duration::from_secs(60), "experience +{gained}");
         xp(gained);
     }
     // At zero the timer stops dropping but keeps draining health, so it counts until the value rises again.
     let ticking = seen.fog_dropped.is_some_and(|d| t - d < TICKING || now.fog == 0);
-    if s.shroud && ticking && t - seen.rumbled >= Duration::from_secs(1) {
+    if ticking && t - seen.rumbled >= Duration::from_secs(1) {
         seen.rumbled = t;
-        enshwick::info_every!(Duration::from_secs(30), "Shroud timer {} of {}", now.fog, now.fog_max);
-        pulse(shroud_rumble(now.fog.into()), 1500, Mix::Rumble);
+        enshwick::info_every!(Duration::from_secs(30), "Shroud timer {} of {}, dangerous: {}", now.fog, now.fog_max, seen.dangerous);
+        let level = if seen.dangerous { s.shroud_dangerous } else { shroud_rumble(&s, now.fog) };
+        // Outlives the next refresh by half a second, so the rumble doesn't flicker between ticks.
+        pulse(level, 1500, Mix::Rumble);
     }
+}
+
+/// `shroud_low` until the last three minutes, then rising on a curve to `shroud_high` as the timer reaches zero.
+fn shroud_rumble(s: &Settings, secs_left: u16) -> f32 {
+    let close = 1.0 - (f32::from(secs_left) / 180.0).min(1.0);
+    s.shroud_low + (s.shroud_high - s.shroud_low) * close * close
 }

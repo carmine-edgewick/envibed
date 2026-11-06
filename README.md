@@ -52,29 +52,28 @@ Proton shares the host's network stack, so the Windows DLL reaches the native Li
 
 ## Settings
 
-Per world, in `<save>-mod-settings/carmine-edgewick.envibed/settings.toml`, or the Settings button on the Mods screen:
+Per world, in `<save>-mod-settings/carmine-edgewick.envibed/settings.toml`, or the Settings button on the Mods screen.
+Changes apply when the world loads again. In a world you join the mod runs on these defaults.
 
 | Key | Default | |
 | --- | --- | --- |
 | `enabled` | `true` | |
 | `url` | `ws://127.0.0.1:12345` | Intiface server |
-| `player` | empty | only this character; empty means every player in the world |
-| `hit.strength`, `hit.duration_ms` | `0.4`, `300` | you deal damage, arrows and spells included |
-| `kill.strength`, `kill.duration_ms` | `0.8`, `1000` | you kill something |
-| `death.strength`, `death.duration_ms` | `1.0`, `2000` | you die |
-| `xp` | `true` | you gain experience: the amount is the strength in percent (floor 10%, cap 100%), over 1 to 5 s |
-| `shroud` | `true` | a rumble while your Shroud timer runs down: 10% until the last 3 minutes, then rising to 75% at zero |
+| `hit_strength`, `hit_duration_ms` | `0.4`, `300` | you deal damage, arrows and spells included; worlds you host only |
+| `kill_strength`, `kill_duration_ms` | `0.8`, `1000` | you kill something; worlds you host only |
+| `death_strength`, `death_duration_ms` | `1.0`, `2000` | you die |
+| `xp` | `true` | you gain experience: the amount is the strength in percent (floor 10%), over 1 to 5 s |
+| `shroud_low` | `0.05` | Shroud rumble while plenty of time is left |
+| `shroud_high` | `0.35` | Shroud rumble at zero; it rises from `shroud_low` over the last 3 minutes |
+| `shroud_dangerous` | `1.0` | Shroud rumble in the dangerous Shroud, told apart by the timer draining over 2.5 s per second |
 
-Strength runs 0 to 1, duration up to 10000 ms; 0 in either turns that reaction off. Of overlapping hit, kill and death
-pulses only the strongest counts, so a killing blow buzzes as a kill. Experience pulses add on top of that and of each
-other, capped at full strength.
+Strengths run 0 to 1, durations up to 10000 ms; 0 turns a reaction off. Every pulse holds for its duration, then fades
+over 15 s: fast at first, then a long gentle tail. Of overlapping hit, kill and death pulses only the strongest counts,
+so a killing blow buzzes as a kill; experience adds on top, capped at full strength. The Shroud rumble lies under
+everything and stops within a second of leaving the Shroud.
 
-Every pulse holds its level for its duration, then fades out over 15 s: fast at first, then a long gentle tail (the
-level times (1 − t)², t running 0 to 1 over the fade). Fading pulses still count, so they overlap and stack far more
-often than the bare durations suggest. The Shroud rumble doesn't fade: it lies under everything else and stops when you leave
-the Shroud.
-
-Changes apply when the world loads again.
+Hits and kills count your own character, taken to be the server's first player slot in a world you host; each joining
+player's slot is logged to check that.
 
 ## Uninstall
 

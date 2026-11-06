@@ -24,3 +24,12 @@ Lush through native Intiface Central on Linux.
 - The read timeout keeps one thread both listening and sending; Windows reports it as `TimedOut`, not `WouldBlock`.
 - Intiface Central here sends `MaxPingTime: 0`, so the ping path is untried.
 - Per-world settings land beside the save, e.g. `Enshrouded/world0-mod-settings/carmine-edgewick.envibed/settings.toml`.
+
+## Settings as flat keys, Shroud levels, dangerous Shroud (2026-11-06)
+
+- The loader writes a settings group missing from a file from the group type's own `Default`, not the parent's: three
+  `Reaction` groups came out 0/0 and silently turned hits, kills and deaths off. Settings are flat keys now.
+- Shroud rumble: `shroud_low` (0.05) rising to `shroud_high` (0.35) over the last 180 s; `shroud_dangerous` (1.0) when the
+  timer drains over 2.5 per second (normal is 1; a log showed 299 to 52 in 30 s). Sticky at zero, cleared when it rises.
+- Hits and kills count only the server's slot 0, assumed to be the host; `PlayerJoined` logs slots to check.
+- Each reaction logs a line at most once a minute, so a session's log shows which ones fired.

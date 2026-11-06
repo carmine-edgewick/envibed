@@ -1,7 +1,7 @@
 //! Vibrates Intiface/Buttplug.io devices when your character lands a hit, makes a kill, gains experience or dies, and rumbles while
 //! the Shroud timer runs down.
 //!
-//! Hits and kills come from the server's game events, so they work in worlds you host. Experience, death and the
+//! Hits and kills come from the server's game events, so they work only in worlds you host. Experience, death and the
 //! Shroud timer come from your own character as your game sees it (`own`), so they work in worlds you join too.
 //!
 //! The game thread only drops a pulse into a channel; a thread of our own owns the websocket, so a slow or
@@ -13,6 +13,7 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{OnceLock, PoisonError, RwLock};
 use std::time::{Duration, Instant};
 
+use enshwick::events::PlayerJoined;
 use enshwick::game_events::{EntityDiedEvent, HitEvent};
 use enshwick::{Entity, Host, Load, Mod, Off};
 use serde_json::{Map, Value};
@@ -30,7 +31,9 @@ const DECAY: Duration = Duration::from_secs(15);
 /// Levels go out rounded to this, so a fade sends a command per step rather than one every tick.
 const STEP: f32 = 0.05;
 
-/// The settings, in each world's `<stem>-mod-settings/carmine-edgewick.envibed/settings.toml`.
+/// The settings, in each world's `<stem>-mod-settings/carmine-edgewick.envibed/settings.toml`. Flat keys rather than
+/// groups: the loader fills a group missing from a file with the group type's own default, so three groups of one type
+/// can't each have their own.
 #[enshwick::config]
 #[derive(Debug, Clone)]
 struct Settings {
@@ -38,33 +41,35 @@ struct Settings {
     enabled: bool,
     /// Intiface Central's server address.
     url: String,
-    /// Only this character's hits and kills count, in worlds you host; empty for every player.
-    player: String,
-    /// When you deal damage.
-    #[config(group)]
-    hit: Reaction,
-    /// When you kill something.
-    #[config(group)]
-    kill: Reaction,
-    /// When you die.
-    #[config(group)]
-    death: Reaction,
-    /// Whether gaining experience vibrates: stronger and longer the more you gain, stacking when gains overlap.
-    xp: bool,
-    /// Whether a low rumble runs while the Shroud timer counts down, rising to 75% over the last minutes.
-    shroud: bool,
-}
-
-/// How hard and how long the toy vibrates for one event.
-#[enshwick::config(group)]
-#[derive(Debug, Clone, Copy, Default)]
-struct Reaction {
-    /// Vibration strength, 0 to 1; 0 turns this reaction off.
+    /// Strength when you deal damage, 0 to 1; 0 turns it off. Only in worlds you host.
     #[config(range = 0.0..=1.0)]
-    strength: f32,
-    /// How long it vibrates, in milliseconds; 0 turns this reaction off.
+    hit_strength: f32,
+    /// How long dealing damage vibrates, in milliseconds, before the 15 s fade.
     #[config(range = 0..=10000)]
-    duration_ms: u32,
+    hit_duration_ms: u32,
+    /// Strength when you kill something, 0 to 1; 0 turns it off. Only in worlds you host.
+    #[config(range = 0.0..=1.0)]
+    kill_strength: f32,
+    /// How long a kill vibrates, in milliseconds, before the 15 s fade.
+    #[config(range = 0..=10000)]
+    kill_duration_ms: u32,
+    /// Strength when you die, 0 to 1; 0 turns it off.
+    #[config(range = 0.0..=1.0)]
+    death_strength: f32,
+    /// How long dying vibrates, in milliseconds, before the 15 s fade.
+    #[config(range = 0..=10000)]
+    death_duration_ms: u32,
+    /// Whether gaining experience vibrates: the amount in percent (10% to 100%) for 1 to 5 s, stacking.
+    xp: bool,
+    /// Shroud rumble while plenty of time is left, 0 to 1; it rises from here over the last 3 minutes.
+    #[config(range = 0.0..=1.0)]
+    shroud_low: f32,
+    /// Shroud rumble as the timer reaches zero, 0 to 1.
+    #[config(range = 0.0..=1.0)]
+    shroud_high: f32,
+    /// Rumble in the dangerous Shroud, where the timer drains several times faster, 0 to 1.
+    #[config(range = 0.0..=1.0)]
+    shroud_dangerous: f32,
 }
 
 impl Default for Settings {
@@ -72,12 +77,16 @@ impl Default for Settings {
         Self {
             enabled: true,
             url: DEFAULT_URL.into(),
-            player: String::new(),
-            hit: Reaction { strength: 0.4, duration_ms: 300 },
-            kill: Reaction { strength: 0.8, duration_ms: 1000 },
-            death: Reaction { strength: 1.0, duration_ms: 2000 },
+            hit_strength: 0.4,
+            hit_duration_ms: 300,
+            kill_strength: 0.8,
+            kill_duration_ms: 1000,
+            death_strength: 1.0,
+            death_duration_ms: 2000,
             xp: true,
-            shroud: true,
+            shroud_low: 0.05,
+            shroud_high: 0.35,
+            shroud_dangerous: 1.0,
         }
     }
 }
@@ -86,7 +95,7 @@ static SETTINGS: RwLock<Option<Settings>> = RwLock::new(None);
 static PULSES: OnceLock<Sender<Pulse>> = OnceLock::new();
 
 fn settings() -> Option<Settings> {
-    SETTINGS.read().unwrap_or_else(PoisonError::into_inner).clone()
+    SETTINGS.read().unwrap_or_else(PoisonError::into_inner).clone().filter(|s| s.enabled)
 }
 
 struct Pulse {
@@ -127,20 +136,10 @@ fn pulse(level: f32, ms: u32, mix: Mix) {
     }
 }
 
-fn react(r: Reaction) {
-    pulse(r.strength, r.duration_ms, Mix::Strongest);
-}
-
-/// Low until the last three minutes, then rising on a curve to 75% as the Shroud timer reaches zero.
 /// Gains run from about 2 to 100: the amount is the strength in percent, floored at 10%, over 1 to 5 s.
 fn xp(amount: u32) {
     let share = (amount as f32 / 100.0).clamp(0.0, 1.0);
     pulse(share.max(0.1), 1000 + (4000.0 * share) as u32, Mix::Stack);
-}
-
-fn shroud_rumble(secs_left: i32) -> f32 {
-    let close = 1.0 - (secs_left.max(0) as f32 / 180.0).min(1.0);
-    0.1 + 0.65 * close * close
 }
 
 /// The mod.
@@ -152,24 +151,30 @@ impl Mod for Envibed {
         load.texts()?;
         load.on_settings(|s: &Settings| *SETTINGS.write().unwrap_or_else(PoisonError::into_inner) = Some(s.clone()))?;
         let world = load.world()?;
-        // The settings to react with, if `entity` is a player we watch.
-        let watched = move |entity: Entity| {
-            let s = settings().filter(|s| s.enabled)?;
-            let player = world.player(entity)?;
-            (s.player.is_empty() || player.name.eq_ignore_ascii_case(&s.player)).then_some(s)
-        };
+        // The host's own character holds the server's first slot. [Assumption, logged on join to check.]
+        let mine = move |entity: Entity| world.player(entity).is_some_and(|p| p.slot == 0);
+        load.on::<PlayerJoined>(move |joined| {
+            if let Some(p) = world.player(joined.entity) {
+                enshwick::info!("player {} joined in slot {}", p.name, p.slot);
+            }
+        })?;
         load.on::<HitEvent>(move |hit| {
             // The root source credits the player for arrows and spells, not just melee.
             let Some(attacker) = hit.root_source_id.filter(|a| *a != hit.target_id) else { return };
             if hit.health_change < 0
-                && let Some(s) = watched(attacker)
+                && mine(attacker)
+                && let Some(s) = settings()
             {
-                react(s.hit);
+                enshwick::info_every!(Duration::from_secs(60), "hit dealt");
+                pulse(s.hit_strength, s.hit_duration_ms, Mix::Strongest);
             }
         })?;
         load.on::<EntityDiedEvent>(move |died| {
-            if let Some(s) = died.killer_player.and_then(watched) {
-                react(s.kill);
+            if died.killer_player.is_some_and(mine)
+                && let Some(s) = settings()
+            {
+                enshwick::info_every!(Duration::from_secs(60), "kill");
+                pulse(s.kill_strength, s.kill_duration_ms, Mix::Strongest);
             }
         })?;
         // Without it hits and kills still work; only your own character's reactions are missing.
