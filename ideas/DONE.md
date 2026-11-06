@@ -9,7 +9,8 @@ What shipped from `ideas/`: what it does, where it lives, the decisions that hol
 duration, a `Reaction` settings group per event. The first version reacted to damage *taken*, scaled by health lost;
 replaced the same day by dealing damage, at the user's request.
 `XpGainedEvent` vibrates at amount/100 (floor 10%) for 1 to 5 s. The worker keeps every running pulse: hit, kill and
-death are `Mix::Strongest`, experience is `Mix::Stack` and adds on top, capped at 1. A worker thread owns the Buttplug v3
+death are `Mix::Strongest`, experience is `Mix::Stack` and adds on top, capped at 1. Each pulse then fades over a fixed 15 s,
+`level × (1 − t)²`; the sum is rounded to 0.05 so a fade sends one command per step, not one per 20 ms tick. A worker thread owns the Buttplug v3
 websocket, so the game thread never waits on Intiface. Tried in single player under Proton (Wine 11) with a Lovense
 Lush through native Intiface Central on Linux.
 

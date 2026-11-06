@@ -64,6 +64,10 @@ Strength runs 0 to 1, duration up to 10000 ms; 0 in either turns that reaction o
 pulses only the strongest counts, so a killing blow buzzes as a kill. Experience pulses add on top of that and of each
 other, capped at full strength.
 
+Every pulse holds its level for its duration, then fades out over 15 s: fast at first, then a long gentle tail (the
+level times (1 − t)², t running 0 to 1 over the fade). Fading pulses still count, so they overlap and stack far more
+often than the bare durations suggest.
+
 Changes apply when the world loads again.
 
 ## Uninstall

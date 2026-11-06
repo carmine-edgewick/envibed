@@ -19,6 +19,10 @@ enshwick::texts!();
 const DEFAULT_URL: &str = "ws://127.0.0.1:12345";
 const TICK: Duration = Duration::from_millis(20);
 const RETRY: Duration = Duration::from_secs(5);
+/// How long a pulse takes to fade out once its full-strength time is over.
+const DECAY: Duration = Duration::from_secs(15);
+/// Levels go out rounded to this, so a fade sends a command per step rather than one every tick.
+const STEP: f32 = 0.05;
 
 /// The settings, in each world's `<stem>-mod-settings/carmine-edgewick.envibed/settings.toml`.
 #[enshwick::config]
@@ -80,6 +84,15 @@ struct Pulse {
     level: f32,
     until: Instant,
     mix: Mix,
+}
+
+impl Pulse {
+    /// Full level until `until`, then an ease-out over `DECAY`: it drops fast at first and trails off gently.
+    fn level(&self, now: Instant) -> f32 {
+        let past = now.saturating_duration_since(self.until).as_secs_f32();
+        let left = 1.0 - (past / DECAY.as_secs_f32()).min(1.0);
+        self.level * left * left
+    }
 }
 
 /// How a pulse combines with the others running.
@@ -227,10 +240,10 @@ impl Toys {
                 Err(RecvTimeoutError::Disconnected) => return Ok(()),
             }
             let now = Instant::now();
-            running.retain(|p| p.until > now);
-            let level = |mix: Mix| running.iter().filter(move |p| p.mix == mix).map(|p| p.level);
+            running.retain(|p| p.until + DECAY > now);
+            let level = |mix: Mix| running.iter().filter(move |p| p.mix == mix).map(|p| p.level(now));
             let strongest = level(Mix::Strongest).fold(0.0, f32::max);
-            let want = (strongest + level(Mix::Stack).sum::<f32>()).min(1.0);
+            let want = ((strongest + level(Mix::Stack).sum::<f32>()).min(1.0) / STEP).round() * STEP;
             if want != sent {
                 self.vibrate(want)?;
                 sent = want;
