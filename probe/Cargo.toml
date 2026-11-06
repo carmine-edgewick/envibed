@@ -1,0 +1,23 @@
+[package]
+name = "envibed-probe"
+version = "0.1.0"
+description = "Logs which game events reach this mod, for finding what a joined world's client sees"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+publish = false
+
+[package.metadata.enshwick]
+id = "carmine-edgewick.probe"
+# Side "server" mods stay on in a world that doesn't run them; "both" would be turned off.
+side = "server"
+name = "Envibed probe"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+enshwick = { path = "../../enshwick/crates/enshwick" }
+
+[profile.release]
+panic = "unwind"

@@ -17,3 +17,6 @@ author.md
 
 # Downloaded loader archives.
 *.zip
+
+# The probe has its own lock file against the local enshwick fork.
+/probe/target
