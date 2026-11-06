@@ -1,0 +1,29 @@
+[package]
+name = "envibed"
+version = "0.1.0"
+description = "Vibrates Intiface/Buttplug.io devices when your character gets hurt"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+publish = false
+
+[package.metadata.enshwick]
+id = "carmine-edgewick.envibed"
+# Game events only fire where the world runs: single player, or a world you host.
+side = "server"
+name = "Envibed"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+enshwick = { git = "https://github.com/enshwick/enshwick", tag = "v1.0.0-alpha.12", features = ["unstable"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tungstenite = { version = "0.27", default-features = false, features = ["handshake"] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+# Every enshwick detour catches panics and falls back to vanilla.
+panic = "unwind"

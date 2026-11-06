@@ -1,0 +1,16 @@
+/target
+
+# Personal notes and setup, not part of the mod.
+todo.md
+author.md
+
+# Local tool and editor state.
+.claude/settings.local.json
+.claude/worktrees/
+.tokensave/
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+*.log
