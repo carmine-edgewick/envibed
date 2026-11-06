@@ -54,6 +54,9 @@ cargo install --locked --git https://github.com/enshwick/enshwick --tag v1.0.0-a
 cargo enshwick install --game ~/.local/share/Steam/steamapps/common/Enshrouded
 ```
 
+`./package.py` builds the release zip, `target/envibed-<version>.zip`, with the license notices of every crate in the
+DLL. It maps your home directory to `~` in the paths Rust bakes into panic messages.
+
 ## Settings
 
 Per world, in `<save>-mod-settings/carmine-edgewick.envibed/settings.toml`, or the Settings button on the Mods screen.
